@@ -4,15 +4,15 @@
 //ssetTimeout(function(){ console.log('Loading page') }, 1000);
 
 // Deifne SVG area size
-var svgWidth = 960;
-var svgHeight = 600;
+var svgWidth = 1000;
+var svgHeight = 650;
 
 // Define margin area for plot and axis labels
 var margin = {
   top: 60,
   right: 60,
-  bottom: 60,
-  left: 60,
+  bottom: 80,
+  left: 90,
   axisLabel : 20 // Space for labels
 };
 
@@ -20,8 +20,8 @@ var margin = {
 var chartWidth = svgWidth - margin.left - margin.right;
 var chartHeight = svgHeight - margin.top - margin.bottom;
 // Debugg
-//console.log(chartWidth)
-//console.log(chartHeight)
+console.log(chartWidth)
+console.log(chartHeight)
 
 // Scatter reference with proper dimensions
 var svg = d3.select("#scatter")
@@ -75,22 +75,126 @@ d3.csv("assets/data/data.csv").then((data, error) => {
 });
 
 
+// function initialize the chart elements
+function loadGraph() {
+    // Create initial xLinearScale, yLinearScale
+    var xLinearScale = setScale(chartData, currentXValue, "x");
+    var yLinearScale = setScale(chartData, currentYValue, "y");
+
+    // Create initial axis
+    var bottomAxis = d3.axisBottom(xLinearScale);
+    var leftAxis = d3.axisLeft(yLinearScale);
+    
+    // show x axis
+    chartGroup.append("g")
+        .classed("axis", true)
+        .attr("transform", `translate(0, ${chartHeight})`)
+        .call(bottomAxis);
+
+    // show y axis
+    chartGroup.append("g")
+        .classed("axis", true)
+        .call(leftAxis);
+        
+    // Create circles with text
+    var container = chartGroup.selectAll("g circle")
+        .data(chartData);
+ 
+    // Add group for text inside circle  
+    var circle = container.enter()
+        .append("g")
+        //.attr("id", "container");
+        .classed("container", true);
+    
+    var radius = 12;
+    // Add circles
+    circle.append("circle")
+        .classed("stateCircle", true)
+        .attr('cx', d => xLinearScale(d[currentXValue]))
+        .attr('cy', d => yLinearScale(d[currentYValue]))
+        .attr('r', radius);        
+    
+    // Add abbreviated text for circles
+    var fontSize = 10
+    circle.append("text")
+        .classed("stateText", true)
+        .text(d => d.abbr)
+        .attr("dx", d => xLinearScale(d[currentXValue]))
+        .attr("dy", d => yLinearScale(d[currentYValue]))
+        .attr("font-size", fontSize);        
+  
+    // Create group for xTitles: x-axis label
+    var xTitles = chartGroup.append("g")
+        .attr("transform", `translate(${chartWidth / 2}, ${chartHeight+20})`)
+        .classed("atext", true)
+        .attr("id", "xTitles");
+
+    // Create text of the x-axis label
+    xTitles.selectAll("text")
+        .data(xAxisLabels)
+        .enter()
+        .append("text")
+        //.attr("x", 0)
+        .attr("y", (d,i) => (i+1)*margin.axisLabel)
+        .attr("value", d => d) // value to grab for event listener
+        .classed("active", d => (d == currentXValue) ? true:false)
+        .classed("inactive", d => (d == currentXValue) ? false:true)
+        .text(d => labelsTitle[d])
+        .on("click", updateChart);
+
+    // Create group for yLabels: y-axis labels
+    var yLabels = chartGroup.append("g")
+        //.attr("transform", `rotate(-90 ${(margin.left/2)} ${(chartHeight/2)+60})`)
+        .attr("transform", `rotate(-90 ${(margin.left)} 185)`)
+        .classed("atext", true)
+        .attr("id", "yLabels");
+    
+    yLabels.selectAll("text")
+        .data(yAxisLabels)
+        .enter()
+        .append("text")
+        .attr("x", margin.top)
+        .attr("y", (d,i) => (i+1)*margin.axisLabel)
+        .attr("value", d => d) // value to grab for event listener
+        .classed("active", d => (d === currentYValue) ? true:false)
+        .classed("inactive", d => (d === currentYValue) ? false:true)
+        .text(d => labelsTitle[d])
+        .on("click", updateChart);
+
+    // updateToolTip function
+    console.log("Init")
+    console.log(currentXValue)
+    console.log(currentYValue)
+    console.log(circle)
+    var circle = updateToolTip(currentXValue, currentYValue, circle);
+};
+
+
+
 // Overwrite scale function
 function setScale(chartData, chosenAxis, choice) {
-    var axisRange = (choice === "x") ? [0, chartWidth]:[chartHeight, 0]
+    // Determine the range based on the selection of the axis
+    var axisRange = [];
+    // x axis selection
+    console.log(choice)
+    console.log(chosenAxis)
+    if(choice === "x")
+        axisRange = [0, chartWidth];
+    else // y axis selection
+        axisRange = [chartHeight, 0];
     
-    // create scales for chosen axis
+    // create scales for chosen axis according to the variables selected
     var linearScale = d3.scaleLinear()
         .domain([d3.min(chartData, d => d[chosenAxis]) * 0.7,
                  d3.max(chartData, d => d[chosenAxis]) * 1.2])
         .range(axisRange);
-  
+    console.log(axisRange)
     return linearScale;
 }
 
 // function used for updating xyAxis var upon click on axis label text
-function renderAxis(newScale, Axis, xy) {
-    var posAxis = (xy === "x") ? d3.axisBottom(newScale):d3.axisLeft(newScale)
+function renderAxis(newScale, Axis, choice) {
+    var posAxis = (choice === "x") ? d3.axisBottom(newScale):d3.axisLeft(newScale)
   
     // Redner transition between xy-axis change
     Axis.transition()
@@ -108,6 +212,7 @@ function renderCircles(elemEnter, newScale, chosenAxis, xy) {
         .transition()
         .duration(1000)
         .attr(`c${xy}`, d => newScale(d[chosenAxis]));
+    console.log(elemEnter)
     // Render transition of text
     elemEnter.selectAll("text")
         .transition()
@@ -118,38 +223,43 @@ function renderCircles(elemEnter, newScale, chosenAxis, xy) {
 }
 
 // function used for updating circles group with new tooltip
-function updateToolTip(currentXValue, currentYValue, elemEnter) {
+function updateToolTip(currentXValue, currentYValue, container) {
     var toolTip = d3.tip()
         .attr("class", "d3-tip")
         .offset([-8, 0])
-        .html(d => `${d.state} <br>${currentXValue}: ${d[currentXValue]} <br>${currentYValue}: ${d[currentYValue]}`);
-    
+        .html(d => {
+                    console.log(d)
+                    return `<div><strong>${d.state}</strong>
+                    <br>${currentXValue}: ${d[currentXValue]} 
+                    <br>${currentYValue}: ${d[currentYValue]} %</div>`});    
     svg.call(toolTip);
 
     // Assign hover events
-    elemEnter.classed("active inactive", true)
-    .on('mouseover', toolTip.show)
+    container.on('mouseover', toolTip.show)
     .on('mouseout', toolTip.hide);
    
-    return elemEnter;
+    return container;
 }
 
-// function update the scatter chart based on the selected axis label change
+// update values in graph after clicking axis labels
 function updateChart() {
-    // get value of the selected axis label
+    // get selected value from axis
     var value = d3.select(this).attr("value");
+    
     // get the x or y axis the value belongs to
-    var xy = xAxisLabels.includes(value) ? "x":"y";
-    // get the element enter
-    var elemEnter = d3.selectAll("#elemEnter");
-    // get the xAxis or yAxis tag object
-    var axis = (xy==="x") ? d3.select("#xAxis"):d3.select("#yAxis");
-    //  select the chosenAxis
-    chosenAxis = (xy === "x") ? currentXValue:currentYValue;
+    var choice = xAxisLabels.includes(value) ? "x":"y";
 
-    if (value !== chosenAxis) {
+    // get the element enter
+    var container = d3.selectAll(".container");
+
+    // get the xAxis or yAxis tag object
+    var axis = (choice==="x") ? d3.select("#xAxis"):d3.select("#yAxis");
+    //  select the chosenAxis
+    var chosenAxis = (choice === "x") ? currentXValue:currentYValue;
+
+    if (value != chosenAxis) {
         // replaces chosenAxis with selected value
-        if(xy === "x") {
+        if(choice == "x") {
             currentXValue = value;
         }
         else {
@@ -157,31 +267,39 @@ function updateChart() {
         };
 
         // update new chosenAxis
-        chosenAxis = (xy === "x") ? currentXValue:currentYValue;
-        // updates xy scale for new data
-        linearScale = setScale(chartData, chosenAxis, xy);
+        if (choice === "x")
+            chosenAxis = currentXValue;
+        else
+            chosenAxis = currentYValue;
+        
+        // updates choice scale for new data
+        linearScale = setScale(chartData, chosenAxis, choice);
         // updates chosen axis with transition
-        axis = renderAxis(linearScale, axis, xy);
+        axis = renderAxis(linearScale, axis, choice);
         // updates circles with new chosen axis values
-        elemEnter = renderCircles(elemEnter, linearScale, chosenAxis, xy);
+        container = renderCircles(container, linearScale, chosenAxis, choice);
+        console.log(container)
+        console.log("currentXValue: " + currentXValue)
+        console.log("currentYValue: " + currentYValue)
         // updates tooltips with new info
-        elemEnter = updateToolTip(currentXValue, currentYValue, elemEnter);
+        container = updateToolTip(currentXValue, currentYValue, container);
+        
         // Parse through the chosen Axis Labels and reset the active/inactive + visibility
-        axisLabels = (xy === "x") ? xAxisLabels:yAxisLabels
+        axisLabels = (choice === "x") ? xAxisLabels:yAxisLabels
         axisLabels.forEach(label => {
             if(label === value) {
                 // Text Label
                 d3.select(`[value=${label}]`).classed("active", true);
                 d3.select(`[value=${label}]`).classed("inactive", false);
                 // Rect switch axis
-                d3.select(`[value=${xy+label}]`).classed("invisible", true);
+                d3.select(`[value=${choice+label}]`).classed("invisible", true);
             }
             else { // not selected
                 // Text Label
                 d3.select(`[value=${label}]`).classed("active", false);
                 d3.select(`[value=${label}]`).classed("inactive", true);
                 // Rect switch axis
-                d3.select(`[value=${xy+label}]`).classed("invisible", false);
+                d3.select(`[value=${choice+label}]`).classed("invisible", false);
             }
         });
     };
@@ -189,6 +307,7 @@ function updateChart() {
 
 // function updates the axis labels tooptip on the rect tag
 function updateLabelsTooltip(xy, labelEnter) {
+    console.log('updateLabelsTooltip')
     // reverse xy for move to opposite axis
     xy = (xy === "x") ? "y":"x";
     // add tooltip to the rect tag
@@ -207,30 +326,6 @@ function updateLabelsTooltip(xy, labelEnter) {
     return labelEnter;
 }
 
-// function updates the rect tag into axis label group
-function updateLabelsRect(xy, xPos, labelsRect) {
-    // Set the size of the square (rect)
-    var squareSize = 12;
-    // Define chosenAxis by xy
-    var chosenAxis = (xy === "x") ? currentXValue : currentYValue;
-    // Add rect tag
-    var enterlabelsRect = null;
-    // Append rect tag
-    enterlabelsRect = labelsRect.enter()
-        .append("rect")
-        .merge(labelsRect)
-        .attr("x", xPos)
-        .attr("y", (d,i) => (i+1)*margin.axisLabel-squareSize)
-        .attr("width", squareSize)
-        .attr("height", squareSize)
-        .classed("stateRect", true)
-        .classed("invisible", d => (d === chosenAxis) ? true:false)
-        .attr("value", d => xy+d)
-        .on("click", updateLabel);;
-
-    // Return enter to be able to append tooltip
-    return enterlabelsRect;
-}
 
 // function updates the text tag into axis label group
 function updateLabelsText(xy, xPos, labelsText) {
@@ -254,6 +349,7 @@ function updateLabelsText(xy, xPos, labelsText) {
 
 // function updates the axis labels after moving one of the axes
 function updateLabel() {
+    console.log('updateLabel')
     // get move value of selection and slice it for the xy axis and axis label value
     var moveLabel = d3.select(this).attr("value");
     var oldAxis = moveLabel.slice(0,1);
@@ -269,39 +365,26 @@ function updateLabel() {
     else {
         // Remove label from y-axis labels
         yAxisLabels = yAxisLabels.filter(e => e !== selectedLabel);
-        // Add label to xLabels labels
+        // Add label to xTitles labels
         xAxisLabels.push(selectedLabel);
     }
 
     // Update group for x axis labels group of rect + text
-    var xLabels = d3.select("#xLabels");
-    // append the rect for move labels
-    var xLabelsRect = xLabels.selectAll("rect")
-        .data(xAxisLabels);
-    // update labels rect tags
-    xEnterLabelsRect = updateLabelsRect("x", -120, xLabelsRect);
-    // update tooptip on rect
-    updateLabelsTooltip("x", xEnterLabelsRect);
-    // Remove old labels rect
-    xLabelsRect.exit().remove();
+    var xTitles = d3.select("#xTitles");
+    
     // append the text for the x-axis labels
-    var xLabelsText = xLabels.selectAll("text")
+    var xTitlesText = xTitles.selectAll("text")
         .data(xAxisLabels);
     // update labels text
-    updateLabelsText("x", 0, xLabelsText);
+    updateLabelsText("x", 0, xTitlesText);
     // Remove any excess old data
-    xLabelsText.exit().remove();
+    xTitlesText.exit().remove();
+
     // Update group for y axis labels group of rect + text
     var yLabels = d3.select("#yLabels");
-    // append the rect for move labels
-    var yLabelsRect = yLabels.selectAll("rect")
-        .data(yAxisLabels);
-    // update labels rect tags
-    yEnterLabelsRect = updateLabelsRect("y", -45, yLabelsRect);
-    // update tooptip on rect tags
+    
     updateLabelsTooltip("y", yEnterLabelsRect);
-    // remove old labels rect tags
-    yLabelsRect.exit().remove();
+
     // append the text for the x-axis labels
     var yLabelsText = yLabels.selectAll("text")
         .data(yAxisLabels);
@@ -311,121 +394,3 @@ function updateLabel() {
     yLabelsText.exit().remove();
 }
 
-// function initialize the chart elements
-function loadGraph() {
-    var radius = 13;
-
-    // Create initial xLinearScale, yLinearScale
-    var xLinearScale = setScale(chartData, currentXValue, "x");
-    var yLinearScale = setScale(chartData, currentYValue, "y");
-
-    // Create initial axis
-    var bottomAxis = d3.axisBottom(xLinearScale);
-    var leftAxis = d3.axisLeft(yLinearScale);
-
-    // append x axis
-    var xAxis = chartGroup.append("g")
-        .classed("axis", true)
-        .attr("transform", `translate(0, ${chartHeight})`)
-        .attr("id", "xAxis")
-        .call(bottomAxis);
-
-    // append y axis
-    var yAxis = chartGroup.append("g")
-      .classed("axis", true)
-      .attr("id", "yAxis")
-      .call(leftAxis);
-      
-    // Define the data for the circles + text
-    var elem = chartGroup.selectAll("g circle")
-        .data(chartData);
- 
-    // Create and place the "blocks" containing the circle and the text  
-    var elemEnter = elem.enter()
-        .append("g")
-        .attr("id", "elemEnter");
-    
-    // Create the circle for each block
-    elemEnter.append("circle")
-        .attr('cx', d => xLinearScale(d[currentXValue]))
-        .attr('cy', d => yLinearScale(d[currentYValue]))
-        .attr('r', radius)
-        .classed("stateCircle", true);
-    
-    // Create the text for each circle
-    elemEnter.append("text")
-        .attr("dx", d => xLinearScale(d[currentXValue]))
-        .attr("dy", d => yLinearScale(d[currentYValue]))
-        .classed("stateText", true)
-        .attr("font-size", parseInt(radius*0.8))
-        .text(d => d.abbr);
-  
-    // Create group for xLabels: x-axis label
-    var xLabels = chartGroup.append("g")
-        .attr("transform", `translate(${chartWidth / 2}, ${chartHeight + 20})`)
-        .classed("atext", true)
-        .attr("id", "xLabels");
-    // Create rect for x-axis move label
-    var xLabelsRect = xLabels.selectAll("rect")
-        .data(xAxisLabels)
-    var enterXLabelsRect = xLabelsRect.enter()
-        .append("rect")
-        .attr("x", -120)
-        .attr("y", (d,i) => (i+1)*margin.axisLabel-12)
-        .attr("width", 12)
-        .attr("height", 12)
-        .classed("stateRect", true)
-        .classed("invisible", d => (d === currentXValue) ? true:false)
-        .attr("value", d => "x"+d)
-        .on("click", updateLabel);
-    // update tooptip on rect
-    updateLabelsTooltip("x", enterXLabelsRect);
-    // Create text of the x-axis label
-    xLabels.selectAll("text")
-        .data(xAxisLabels)
-        .enter()
-        .append("text")
-        .attr("x", 0)
-        .attr("y", (d,i) => (i+1)*margin.axisLabel)
-        .attr("value", d => d) // value to grab for event listener
-        .classed("active", d => (d === currentXValue) ? true:false)
-        .classed("inactive", d => (d === currentXValue) ? false:true)
-        .text(d => labelsTitle[d])
-        .on("click", updateChart);
-
-    // Create group for yLabels: y-axis labels
-    var yLabels = chartGroup.append("g")
-        .attr("transform", `rotate(-90 ${(margin.left/2)} ${(chartHeight/2)+60})`)
-        .classed("atext", true)
-        .attr("id", "yLabels");
-    // Create rect for y-axis move label
-    var yLabelsRect = yLabels.selectAll("rect")
-        .data(yAxisLabels);
-    var enterYLabelsRect = yLabelsRect.enter()
-        .append("rect")
-        .attr("x", -45)
-        .attr("y", (d,i) => (i+1)*margin.axisLabel-12)
-        .attr("width", 12)
-        .attr("height", 12)
-        .classed("stateRect", true)
-        .classed("invisible", d => (d === currentYValue) ? true:false)
-        .attr("value", d => "y"+d)
-        .on("click", updateLabel);
-    // update tooptip on rect
-    updateLabelsTooltip("y", enterYLabelsRect);
-    // Create text of the y-axis label
-    yLabels.selectAll("text")
-        .data(yAxisLabels)
-        .enter()
-        .append("text")
-        .attr("x", margin.top)
-        .attr("y", (d,i) => (i+1)*margin.axisLabel)
-        .attr("value", d => d) // value to grab for event listener
-        .classed("active", d => (d === currentYValue) ? true:false)
-        .classed("inactive", d => (d === currentYValue) ? false:true)
-        .text(d => labelsTitle[d])
-        .on("click", updateChart);
-
-    // updateToolTip function
-    var elemEnter = updateToolTip(currentXValue, currentYValue, elemEnter);
-};
